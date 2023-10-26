@@ -1,5 +1,5 @@
 import { type APIGatewayProxyEventV2 } from 'aws-lambda';
-import { defaultContext, defaultEvent } from '../../../tests/factories/Event';
+import { defaultContext, defaultEvent } from '../../../tests/factories/Lambda';
 import handler from './hello_world';
 
 describe('hello_world', () => {
