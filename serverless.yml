@@ -1,0 +1,112 @@
+service: core
+frameworkVersion: '3'
+
+plugins:
+  - serverless-webpack
+
+useDotenv: true
+dashboard:
+  disableMonitoring: true
+provider:
+  name: aws
+  runtime: nodejs18.x
+  websocketsApiName: livechat-websockets-api
+  websocketsApiRouteSelectionExpression: $request.body.action
+  websocketsDescription: Live Chat Websocket Api
+
+functions:
+  helloWorld:
+    handler: lambdas.HelloWorld
+    role: CoreLambdaRole
+    events:
+      - httpApi:
+          path: /hello
+          method: get
+
+resources:
+  Resources:
+    CoreLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: CoreLambda-${opt:stage, 'dev'}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: DynamoDBWriteAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource: 
+                    - 'Fn::Join':
+                      - ':'
+                      -
+                        - 'arn:aws:logs'
+                        - Ref: 'AWS::Region'
+                        - Ref: 'AWS::AccountId'
+                        - 'log-group:/aws/lambda/*:*:*'
+                - Effect: Allow
+                  Action:
+                    - dynamodb:Query
+                    - dynamodb:Scan
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                    - dynamodb:DeleteItem
+                  Resource:
+                    - "Fn::GetAtt": [UsersTable, "Arn"]
+                    - { "Fn::Join": [ "/", [ 
+                        { "Fn::GetAtt": [UsersTable, "Arn"] }, "index", "sortKeyIndex" 
+                      ]]}
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: USERS_TABLE
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: sortKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: sortKey
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        GlobalSecondaryIndexes:
+          - IndexName: sortKeyIndex
+            KeySchema:
+              - AttributeName: sortKey
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
+
+custom:
+  APIGatewayConnection: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/@connections/*
+  webpack:
+    includeModules: true
+    packager: yarn
+package:
+  exclude:
+    - node_modules/dynamodb-localhost/**
+    - node_modules/serverless-dynamodb-local/**
+    - node_modules/serverless-offline/**
+    - node_modules/@types/**
