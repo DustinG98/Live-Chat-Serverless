@@ -1,4 +1,4 @@
-import connectionHandler from './src/lambdas/api/websocket_connection_handler';
+import connectionHandler from './src/lambdas/websocket/websocket_connection_handler';
 
 export {
   connectionHandler,
