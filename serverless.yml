@@ -13,14 +13,34 @@ provider:
   websocketsApiName: livechat-websockets-api
   websocketsApiRouteSelectionExpression: $request.body.action
   websocketsDescription: Live Chat Websocket Api
-
+  httpApi:
+      cors: true
+      authorizers:
+        userPoolAuthorizer:
+          identitySource: $request.header.Authorization
+          issuerUrl: 
+            Fn::Join:
+              - ''
+              - - 'https://cognito-idp.'
+                - Ref: AWS::Region
+                - '.amazonaws.com/'
+                - Ref: UserPool 
+          audience:
+            - Ref: UserPool 
+          type: jwt
 functions:
+  lambdaAuthorizer:
+    handler: lambdas.lambdaAuthorizer
   connectionHandler:
       role: CoreLambdaRole
       handler: lambdas.connectionHandler
       events:
         - websocket:
             route: $connect
+            authorizer:
+              name: lambdaAuthorizer
+              identitySource:
+                - 'route.request.querystring.Authorizer'
         - websocket:
             route: $disconnect
 resources:
@@ -103,6 +123,38 @@ resources:
             ProvisionedThroughput:
               ReadCapacityUnits: 1
               WriteCapacityUnits: 1
+    UserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: user-pool
+        Schema:
+          - Name: email
+            Required: true
+            Mutable: true
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 6
+        AutoVerifiedAttributes: ["email"]
+    AdminUserGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: Admin
+        UserPoolId: { Ref: UserPool }
+    StoreOwnerUserGroup:
+      Type: AWS::Cognito::UserPoolGroup
+      Properties:
+        GroupName: StoreOwner
+        UserPoolId: { Ref: UserPool }
+    UserClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: user-pool
+        GenerateSecret: false
+        UserPoolId: { Ref: UserPool }
+        AccessTokenValidity: 5
+        IdTokenValidity: 5
+        ExplicitAuthFlows:
+          - "USER_PASSWORD_AUTH"
 
 custom:
   APIGatewayConnection: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*/@connections/*
