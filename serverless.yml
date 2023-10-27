@@ -15,14 +15,14 @@ provider:
   websocketsDescription: Live Chat Websocket Api
 
 functions:
-  helloWorld:
-    handler: lambdas.HelloWorld
-    role: CoreLambdaRole
-    events:
-      - httpApi:
-          path: /hello
-          method: get
-
+  connectionHandler:
+      role: CoreLambdaRole
+      handler: lambdas.connectionHandler
+      events:
+        - websocket:
+            route: $connect
+        - websocket:
+            route: $disconnect
 resources:
   Resources:
     CoreLambdaRole:
@@ -38,7 +38,7 @@ resources:
                   - lambda.amazonaws.com
               Action: sts:AssumeRole
         Policies:
-          - PolicyName: DynamoDBWriteAccess
+          - PolicyName: Access
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
@@ -68,6 +68,11 @@ resources:
                     - { "Fn::Join": [ "/", [ 
                         { "Fn::GetAtt": [UsersTable, "Arn"] }, "index", "sortKeyIndex" 
                       ]]}
+                - Effect: Allow
+                  Action:
+                    - execute-api:ManageConnections
+                  Resource:
+                    - ${self:custom.APIGatewayConnection}
     UsersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Retain
