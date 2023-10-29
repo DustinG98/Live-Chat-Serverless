@@ -29,8 +29,22 @@ provider:
             - Ref: UserPool 
           type: jwt
 functions:
-  lambdaAuthorizer:
-    handler: lambdas.lambdaAuthorizer
+  login:
+    role: CoreLambdaRole
+    handler: lambdas.login
+    environment:
+      COGNITO_USER_POOL_ID: { Ref: UserPool }
+      COGNITO_CLIENT_ID: { Ref: UserClient }
+    events:
+      - httpApi:
+          path: /auth/login
+          method: post
+          authorizer:
+  websocketAuthorizer:
+    handler: lambdas.websocketAuthorizer
+    environment:
+      COGNITO_USER_POOL_ID: { Ref: UserPool }
+      COGNITO_CLIENT_ID: { Ref: UserClient }
   connectionHandler:
       role: CoreLambdaRole
       handler: lambdas.connectionHandler
@@ -38,9 +52,9 @@ functions:
         - websocket:
             route: $connect
             authorizer:
-              name: lambdaAuthorizer
+              name: websocketAuthorizer
               identitySource:
-                - 'route.request.querystring.Authorizer'
+                - 'route.request.querystring.token'
         - websocket:
             route: $disconnect
 resources:
@@ -58,6 +72,17 @@ resources:
                   - lambda.amazonaws.com
               Action: sts:AssumeRole
         Policies:
+          - PolicyName: CognitoAuthPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - cognito-idp:AdminInitiateAuth
+                    - cognito-idp:AdminCreateUser
+                    - cognito-idp:AdminSetUserPassword
+                    - cognito-idp:AdminUpdateUserAttributes
+                  Resource: "*"
           - PolicyName: Access
             PolicyDocument:
               Version: '2012-10-17'
