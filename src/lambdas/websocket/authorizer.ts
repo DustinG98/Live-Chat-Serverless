@@ -42,10 +42,8 @@ const handler = async (event) => {
   try {
     const payload = await jwtVerifier.verify(event.queryStringParameters?.token
         ?? event.headers.Authorization, { clientId: process.env.COGNITO_CLIENT_ID ?? '' });
-    // allow access
     return generatePolicy(payload.sub, 'Allow', event.methodArn, payload);
   } catch (err) {
-    // deny access
     return generatePolicy('user', 'Deny', event.methodArn, {});
   }
 };
