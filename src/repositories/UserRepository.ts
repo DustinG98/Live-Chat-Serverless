@@ -6,7 +6,7 @@
 
 import { DynamoDB } from 'aws-sdk';
 import {
-  UserConnection, User, USER_TABLE_NAME, Friendship, AllFriendships,
+  UserConnection, User, USER_TABLE_NAME,
 } from '../models/users';
 
 export class UserRepository {
@@ -190,31 +190,6 @@ export class UserRepository {
     );
   }
 
-  async findFriendShip(userName:string, to:string): Promise<Friendship | undefined> {
-    const params:DynamoDB.DocumentClient.QueryInput = {
-      TableName: USER_TABLE_NAME,
-      KeyConditionExpression: 'userName = :userName AND sortKey = :sortKey',
-      ExpressionAttributeValues: {
-        ':userName': userName,
-        ':sortKey': `FRIEND#${to}`,
-      },
-    };
-    return this.dynamoDb.query(params).promise().then((response) => {
-      if (response.$response.error) {
-        throw new Error(response.$response.error.message);
-      }
-      return response.Items?.at(0) as Friendship;
-    });
-  }
-
-  // eslint-disable-next-line class-methods-use-this
-  private evaluateRelationship(existingFriendship: Friendship | undefined) {
-    if (!existingFriendship) return 'requested';
-    if (existingFriendship.relationship === 'pending') return 'accepted';
-    if (existingFriendship.relationship === 'requested') throw new Error('Cannot accept sent friend requests');
-    return undefined;
-  }
-
   async recordChannel(userOne: string, userTwo:string, channelId: string) {
     const params = {
       TableName: USER_TABLE_NAME,
@@ -233,134 +208,5 @@ export class UserRepository {
       console.error('error recording channel', response.$response.error);
       throw new Error(response.$response.error.message);
     }
-  }
-
-  async addFriend(userName:string, to: string) {
-    const [preferredUserName, discriminator] = to.split('#');
-
-    const existingFriendship = await this.findFriendShip(userName, to);
-    if (await this.findUserByPublicId(preferredUserName, discriminator)) {
-      const params = {
-        TableName: USER_TABLE_NAME,
-        Item: {
-          userName,
-          sortKey: `FRIEND#${to}`,
-          relationship: this.evaluateRelationship(existingFriendship),
-        },
-      };
-      const response = await this.dynamoDb.put(params).promise();
-      if (response.$response.error) {
-        console.error('error adding friend', response.$response.error);
-        throw new Error(response.$response.error.message);
-      }
-    }
-  }
-
-  async removeFriend(userName: string, to: string) {
-    const [preferredUserName, discriminator] = to.split('#');
-
-    const existingFriendship = await this.findFriendShip(userName, to);
-    if (await this.findUserByPublicId(preferredUserName, discriminator) && existingFriendship) {
-      const params: DynamoDB.DocumentClient.DeleteItemInput = {
-        TableName: USER_TABLE_NAME,
-        Key: {
-          userName,
-          sortKey: `FRIEND#${to}`,
-        },
-      };
-      const response = await this.dynamoDb.delete(params).promise();
-      if (response.$response.error) {
-        console.error('error removing friend', response.$response.error);
-        throw new Error(response.$response.error.message);
-      }
-    }
-  }
-
-  async recordPending(userName:string, to: string) {
-    const [preferredUserName, discriminator] = to.split('#');
-    if (await this.findUserByPublicId(preferredUserName, discriminator)) {
-      const params = {
-        TableName: USER_TABLE_NAME,
-        Item: {
-          userName,
-          sortKey: `FRIEND#${to}`,
-          relationship: 'pending',
-        },
-      };
-      const response = await this.dynamoDb.put(params).promise();
-      if (response.$response.error) {
-        console.error('error recording pending friend', response.$response.error);
-        throw new Error(response.$response.error.message);
-      }
-    }
-  }
-
-  async recordAccepted(userName:string, to: string) {
-    const [preferredUserName, discriminator] = to.split('#');
-    if (await this.findUserByPublicId(preferredUserName, discriminator)) {
-      const params = {
-        TableName: USER_TABLE_NAME,
-        Item: {
-          userName,
-          sortKey: `FRIEND#${to}`,
-          relationship: 'accepted',
-        },
-      };
-      const response = await this.dynamoDb.put(params).promise();
-      if (response.$response.error) {
-        console.error('error recording accepted friend', response.$response.error);
-        throw new Error(response.$response.error.message);
-      }
-    }
-  }
-
-  async getFriendshipsByUser(userName:string): Promise<AllFriendships> {
-    const params:DynamoDB.DocumentClient.QueryInput = {
-      TableName: USER_TABLE_NAME,
-      KeyConditionExpression: '#pk = :userName AND begins_with(#sk, :sortKey)',
-      ExpressionAttributeValues: {
-        ':userName': userName,
-        ':sortKey': 'FRIEND#',
-      },
-      ExpressionAttributeNames: {
-        '#pk': 'userName',
-        '#sk': 'sortKey',
-      },
-    };
-
-    const response = await this.dynamoDb.query(params).promise();
-
-    if (response.$response.error) {
-      throw new Error(response.$response.error.message);
-    }
-    const found = response.Items as Friendship[];
-    // get profiles for each friendship
-    const profileToFriendship = await Promise.allSettled(found.map(async (friendship) => {
-      if (friendship.sortKey) {
-        const [,preferredUserName, discriminator] = friendship.sortKey.split('#');
-        return this.findUserByPublicId(preferredUserName, discriminator).then((profile) => ({
-          profile,
-          friendship,
-        }));
-      }
-      return undefined;
-    }));
-    return profileToFriendship.reduce((pV: any, cV: any) => {
-      const record = { ...cV.value.profile, channel: cV.value.friendship.channel };
-      if (cV.value.friendship.relationship === 'accepted') {
-        pV.friends.push(record);
-      }
-      if (cV.value.friendship.relationship === 'pending') {
-        pV.pending.push(record);
-      }
-      if (cV.value.friendship.relationship === 'requested') {
-        pV.requests.push(record);
-      }
-      return pV;
-    }, {
-      friends: [],
-      requests: [],
-      pending: [],
-    });
   }
 }
