@@ -118,6 +118,36 @@ resources:
                     - execute-api:ManageConnections
                   Resource:
                     - ${self:custom.APIGatewayConnection}
+    StoreTable:
+      Type: AWS::DynamoDB::Table
+      DeletionPolicy: Retain
+      Properties:
+        TableName: STORE_TABLE
+        AttributeDefinitions:
+          - AttributeName: storeId
+            AttributeType: S
+          - AttributeName: sortKey
+            AttributeType: S
+        KeySchema:
+          - AttributeName: storeId
+            KeyType: HASH
+          - AttributeName: sortKey
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        GlobalSecondaryIndexes:
+          - IndexName: sortKeyIndex
+            KeySchema:
+              - AttributeName: sortKey
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 1
+              WriteCapacityUnits: 1
     UsersTable:
       Type: AWS::DynamoDB::Table
       DeletionPolicy: Retain
